@@ -12,9 +12,12 @@
     #map {
       height: 600px;
     }
-
     #data {
       height: 400px;
+    }
+    label{
+        clear:both;
+        float:left;
     }
   </style>
 </head>
@@ -23,15 +26,41 @@
     <h1>TN14-LTDT-DAGK</h1>
     <div class"row">
       <div class="col-xs-4 pull-right">
-        <h5><strong>Ghi chú:</strong> <span style="color:red">Đỏ</span> (điểm bắt đầu), <span style="color:green">Xanh lá</span> (đường đi), <span style="color:blue">Xanh dương</span> (điểm kết thúc)</h5>
+        <!-- <h5><strong>Ghi chú:</strong> <span style="color:red">Đỏ</span> (điểm bắt đầu), <span style="color:green">Xanh lá</span> (đường đi), <span style="color:blue">Xanh dương</span> (điểm kết thúc)</h5> -->
         <form id="input-form">  
           <div class="form-group">
             <label for="data">Dữ liệu</label>
-            <textarea class="form-control" name="data" id="data"></textarea>
+            <!-- <textarea class="form-control" name="data" id="data"></textarea> -->
+            <input id="csvFile" type="file"/>
+            <div>
+                <label style="margin-top: 10px">Top:</label>
+                <input type="range" min="0" max="30" value="0" class="slider" id="top" style="width:50%;position: absolute;margin-top: 10px;margin-left:54px;">
+                <input type="number" min="0" max="30" value="0" id="topNumber" class="sliderNumber" style="position: absolute;margin-top:10px;margin-left:200px;width:10%"/>
+            </div>
+            <div>
+                <label style="margin-top: 10px">Bottom:</label>
+                <input type="range" min="0" max="30" value="0" class="slider" id="bottom" style="width:50%;position: absolute;margin-top: 44px;margin-left:54px;">
+                <input type="number" min=0 max=30 value=0 id="bottomNumber" class="sliderNumber" style="position: absolute;margin-top:44px;margin-left:200px;width:10%"/>
+            </div>
+            <div>
+                <label style="margin-top: 10px">Left:</label>
+                <input type="range" min="0" max="30" value="0" class="slider" id="left" style="width:50%;position:absolute;margin-top:78px;margin-left:54px;">
+                <input type="number" min=0 max=30 value=0 id="leftNumber" class="sliderNumber" style="position: absolute;margin-top:78px;margin-left:200px;width:10%"/>
+            </div>
+            <div>
+                <label style="margin-top: 10px">Right:</label>
+                <input type="range" min="0" max="30" value="0" class="slider" id="right" style="width:50%;position:absolute;margin-top:112px;margin-left:54px;">
+                <input type="number" min=0 max=30 value=0 id="rightNumber" class="sliderNumber" style="position: absolute;margin-top:112px;margin-left:200px;width:10%"/>
+            </div>
+            <div>
+                <input type="checkbox" id="check" style="margin-top: 140px;margin-left: -50px;">Show Removed Data<br>
+            </div>
+            <textarea id="content-target" style="display:none;"></textarea>
           </div>
-          <button type="submit" class="btn btn-primary">Hiển thị</button>
+          <button type="submit" class="btn btn-primary" style="margin-top:15px">Hiển thị</button>
         </form>
       </div>
+      <textarea rows="20", cols="45" readonly style="position: absolute;margin-left: 780px;margin-top: 270;display:none;" id="textfield"></textarea>
       <div class="col-xs-8 pull-left">
         <div id="map"></div>
       </div>
@@ -40,96 +69,279 @@
   <script src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.3/jquery.min.js"></script>
   <script type="text/javascript" src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/js/bootstrap.min.js"></script>
   <script type="text/javascript">
-    // This example creates circles on the map, representing populations in North
-    // America.
-
-    // First, create an object containing LatLng and population for each city.
+    var sliders = document.getElementsByClassName("slider");
+    var outputs = document.getElementsByClassName("sliderNumber");
+    for (slider of sliders)
+    {
+        slider.oninput = function () {
+            this.nextElementSibling.value = this.value;
+        }
+    }
+    for (output of outputs)
+    {
+        output.addEventListener('change',function(){
+            this.previousElementSibling.value= this.value;
+        })
+    }
     var path, start, end;
-
     function initMap() {
-      // Create the map.
       var map = window.map = new google.maps.Map(document.getElementById('map'), {
         zoom: 15,
         center: {lat: 10.762689, lng: 106.6801512},
         mapTypeId: google.maps.MapTypeId.TERRAIN
       });
     }
-
-    $(function() {
-      console.log('Ready!');
-      $('#input-form').on('submit', function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-
-        // Clear old polylines
-        if (path) {
-          path.setMap(null);
-          start.setMap(null);
-          end.setMap(null);
+    document.getElementById('csvFile').addEventListener('change', getFile);
+    function getFile(event) {
+        const input = event.target
+        if ('files' in input && input.files.length > 0) {
+            placeFileContent(document.getElementById('content-target'), input.files[0])
         }
+    }
 
-        path = null;
-        var data = [];
+    function placeFileContent(target, file) {
+        readFileContent(file).then(content => {
+            target.value = content;
+        }).catch(error => console.log(error))
+    }
 
-        var points = $('#data').val().match(/[^\r\n]+/g);
-        if (points) {
-          for (var i = 0; i < points.length; i++) {
-            var p = points[i];
-            var c = p.split(',');
+    function readFileContent(file) {
+        const reader = new FileReader()
+        return new Promise((resolve, reject) => {
+            reader.onload = event => resolve(event.target.result)
+            reader.onerror = error => reject(error)
+            reader.readAsText(file)
+        })
+    }
+    function parseToArrayFromCsvFile(txtData,bottom,top,left,right)
+    {
+        var data=[];
+        var data1=[];
+        var data2=[];
+        var lines = txtData.split('\n');
+        for (var i=0;i<lines.length-1;i++) {
+            var c = lines[i].split(',');
+            data1.push({
+                lat: parseFloat(c[0]),
+                lng: parseFloat(c[1]),
+            });
+            data2.push({
+                lat: parseFloat(c[0]),
+                lng: parseFloat(c[1]),
+            });
             data.push({
-              lat: parseFloat(c[0]),
-              lng: parseFloat(c[1])
-            })
-          }
-
-          path = new google.maps.Polyline({
-            path: data,
-            geodesic: true,
-            strokeColor: '#00FF00',
-            strokeOpacity: 0,
-            strokeWeight: 2,
-            map: window.map
-          });
-          
-          for (var point in data){
-            var tmp = new google.maps.Circle({
-              strokeColor: '#FF0000',
-              strokeOpacity: 0.8,
-              strokeWeight: 10,
-              fillColor: '#FF0000',
-              fillOpacity: 0.75,
-              map: map,
-              center: data[point],
-              radius: 1
-            })
-          }
-
-          window.map.setCenter(data[0]);
-
-          // start = new google.maps.Circle({
-          //   strokeColor: '#FF0000',
-          //   strokeOpacity: 0.8,
-          //   strokeWeight: 2,
-          //   fillColor: '#FF0000',
-          //   fillOpacity: 0.75,
-          //   map: map,
-          //   center: data[0],
-          //   radius: 5
-          // });
-
-          // end = new google.maps.Circle({
-          //   strokeColor: '#0000FF',
-          //   strokeOpacity: 0.8,
-          //   strokeWeight: 2,
-          //   fillColor: '#0000FF',
-          //   fillOpacity: 0.75,
-          //   map: map,
-          //   center: data[data.length - 1],
-          //   radius: 5
-          // });
+                lat: parseFloat(c[0]),
+                lng: parseFloat(c[1]),
+            });
         }
-      });
-    });
+        var data1 = data1.sort(function(a,b){
+            return a['lat']-b['lat'];
+        })
+        var data2= data2.sort(function(a,b){
+            return a['lng']-b['lng'];
+        })
+        var removedData=[];
+        var dataLength = data1.length;
+        var removeFromBottom = Math.floor((dataLength*bottom)/100);
+        var removeFromTop = Math.floor((dataLength*top)/100);
+        var removeFromLeft = Math.floor((dataLength*left)/100);
+        var removeFromRight = Math.floor((dataLength*right)/100);
+        for(i=0;i<removeFromBottom;i++)
+        {
+            if (checkContainInArray(removedData,data1[i])==false)
+            {
+                removedData.push(data1[i]);
+            }
+            removeArrayElement(data,data1[i]);
+        }
+        for(i=dataLength-1;i>dataLength-removeFromTop-1;i--)
+        {
+            if (checkContainInArray(removedData,data1[i])==false)
+            {
+                removedData.push(data1[i]);
+            }
+            removeArrayElement(data,data1[i]);
+        }
+        for(i=0;i<removeFromLeft;i++)
+        {
+            if (checkContainInArray(removedData,data2[i])==false)
+            {
+                removedData.push(data2[i]);
+            }
+            removeArrayElement(data,data2[i]);
+        }
+        for(i=dataLength-1;i>dataLength-removeFromRight-1;i--)
+        {
+            if (checkContainInArray(removedData,data2[i])==false)
+            {
+                removedData.push(data2[i]);
+            }
+            removeArrayElement(data,data2[i]);
+        }
+        var returnData=[];
+        returnData.push(data);
+        returnData.push(removedData);
+        return returnData;
+    }
+    function removeArrayElement(array, element) {
+        var index=-1;
+        for (i=0;i<array.length;i++)
+        {
+            let isHaving= true;
+            for (var key in array[i])
+            {
+                if (array[i][key]!=element[key])
+                {
+                    isHaving=false;
+                    break;
+                }
+            }
+            if (isHaving==true)
+            {
+                index=i;
+                break;
+            }
+        }
+        if (index !== -1) {
+            array.splice(index, 1);
+        }
+    }
+    function checkContainInArray(array,el)
+    {
+        let isContain = true;
+        if (array.length==0)
+            return false;
+        for (b of array) {
+            let isHaving = true;
+            for (var key in b) {
+                if (b[key] != el[key]) {
+                    isHaving = false;
+                    break;
+                }
+            }
+            if (isHaving == true) {
+                isContain = true;
+                break;
+            }
+            else {
+                isContain = false;
+            }
+        }
+        return isContain;
+    }
+    var circles =[];
+    var hasSetCenter = false;
+    $(function () {
+            $('#input-form').on('submit', function (e) {
+                var txtData = $('#content-target').val();
+                e.preventDefault();
+                e.stopPropagation();
+                // if (path) {
+                //     alert("fdsa");
+                //     path.setMap(null);
+                //     start.setMap(null);
+                //     end.setMap(null);
+                // }
+                path=null;
+                for (var i in circles) {
+                    circles[i].setMap(null);
+                }
+                var bottom = $('#bottom').val();
+                var top = $('#top').val();
+                var left = $('#left').val();
+                var right = $('#right').val();
+                var data = parseToArrayFromCsvFile(txtData,bottom,top,left,right);
+                if ($('#check').is(":checked")){
+                    if (data[1].length > 0) {
+                        path = new google.maps.Polyline({
+                            path: data[1],
+                            geodesic: true,
+                            strokeColor: '#00FF00',
+                            strokeOpacity: 0,
+                            strokeWeight: 2,
+                            map: window.map
+                        });
+
+                        for (var point in data[1]) {
+                            var tmp = new google.maps.Circle({
+                                strokeColor: '#FF0000',
+                                strokeOpacity: 0.8,
+                                strokeWeight: 10,
+                                fillColor: '#FF0000',
+                                fillOpacity: 0.75,
+                                map: map,
+                                center: data[1][point],
+                                radius: 1
+                            });
+                            circles.push(tmp);
+                        }
+                        if (hasSetCenter == false) {
+                            window.map.setCenter(data[1][0]);
+                            hasSetCenter = true;
+                        }
+                    }
+                    if (data[0].length>0)
+                    {
+                        $('#textfield').css('display','');
+                        $('#textfield').text("There are "+data[0].length+" removed points on the map: \n");
+                        for (d of data[0])
+                        {
+                            $('#textfield').text($('#textfield').text()+d['lat']+' , '+d['lng']+'\n');
+                        }
+
+                    }
+                    else 
+                    {
+                        $('#textfield').css('display','none');
+                    }
+                }
+                else 
+                {
+                    if (data[0].length > 0) {
+                        path = new google.maps.Polyline({
+                            path: data[0],
+                            geodesic: true,
+                            strokeColor: '#00FF00',
+                            strokeOpacity: 0,
+                            strokeWeight: 2,
+                            map: window.map
+                        });
+
+                        for (var point in data[0]) {
+                            var tmp = new google.maps.Circle({
+                                strokeColor: '#FF0000',
+                                strokeOpacity: 0.8,
+                                strokeWeight: 10,
+                                fillColor: '#FF0000',
+                                fillOpacity: 0.75,
+                                map: map,
+                                center: data[0][point],
+                                radius: 1
+                            });
+                            circles.push(tmp);
+                        }
+                        if (hasSetCenter == false) {
+                            window.map.setCenter(data[0][0]);
+                            hasSetCenter = true;
+                        }
+                    }
+                    if (data[1].length>0)
+                    {
+                        $('#textfield').css('display','');
+                        $('#textfield').text("There are "+data[1].length+" removed points on the map: \n");
+                        for (d of data[1])
+                        {
+                            $('#textfield').text($('#textfield').text()+d['lat']+' , '+d['lng']+'\n');
+                        }
+
+                    }
+                    else 
+                    {
+                        $('#textfield').css('display','none');
+                    }
+                }
+            });
+        });
   </script>
   <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCy5eZQWRieZaAY0hYv3oxHxMKd9CkkI1I&signed_in=true&libraries=drawing&callback=initMap" async defer></script>
 </body>
